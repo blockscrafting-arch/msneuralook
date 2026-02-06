@@ -1,0 +1,1 @@
+"""Structlog configuration for userbot."""

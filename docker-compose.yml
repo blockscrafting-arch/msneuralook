@@ -1,0 +1,104 @@
+# Telegram Parser & Publisher — оркестрация сервисов
+# Запуск: скопировать .env.example в .env, заполнить, затем docker-compose up -d
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: parser_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-parser_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-parser_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init_db/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-parser_user} -d ${POSTGRES_DB:-parser_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: parser_n8n
+    restart: unless-stopped
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-parser_db}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:-parser_user}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      N8N_HOST: ${N8N_HOST:-n8n.neurascope.pro}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-https}
+      N8N_PORT: 5678
+      WEBHOOK_URL: ${N8N_PROTOCOL:-https}://${N8N_HOST:-n8n.neurascope.pro}/
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - pdf_storage:/data/pdfs:ro
+    ports:
+      - "5678:5678"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  userbot:
+    build:
+      context: ./userbot
+      dockerfile: Dockerfile
+    container_name: parser_userbot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL}
+      SOURCE_CHANNEL: ${SOURCE_CHANNEL}
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+      TELEGRAM_SESSION_STRING: ${TELEGRAM_SESSION_STRING}
+      PDF_STORAGE_PATH: /data/pdfs
+    volumes:
+      - pdf_storage:/data/pdfs
+    depends_on:
+      - n8n
+
+  editor-bot:
+    build:
+      context: ./editor_bot
+      dockerfile: Dockerfile
+    container_name: parser_editor_bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      EDITOR_CHAT_ID: ${EDITOR_CHAT_ID}
+      TARGET_CHANNEL_ID: ${TARGET_CHANNEL_ID}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-parser_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-parser_db}
+      EDITOR_BOT_WEBHOOK_PATH: ${EDITOR_BOT_WEBHOOK_PATH:-/incoming/post}
+      PDF_STORAGE_PATH: /data/pdfs
+    volumes:
+      - pdf_storage:/data/pdfs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:alpine
+    container_name: parser_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
+    depends_on:
+      - n8n
+
+volumes:
+  postgres_data:
+  n8n_data:
+  pdf_storage:
+  certbot_www:
+  certbot_conf:
