@@ -1,0 +1,164 @@
+{
+  "name": "PDF Processing to Summary and Editor Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pdf-post",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-pdf",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "filePath": "={{ $json.body?.pdf_path || $json.pdf_path }}",
+        "options": {}
+      },
+      "id": "read-pdf",
+      "name": "Read PDF",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "extract-pdf",
+      "name": "Extract From PDF",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "modelId": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "content": "=Напиши краткое саммари текста для публикации в канале. Сохраняй смысл, будь лаконичен.\n\nТекст:\n{{ $json.data?.text || $json.text || '' }}",
+              "role": "user"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "openai",
+      "name": "OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "source_channel",
+              "name": "source_channel",
+              "value": "={{ $('Webhook').first().json.body?.source_channel ?? $('Webhook').first().json.source_channel ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "source_message_id",
+              "name": "source_message_id",
+              "value": "={{ $('Webhook').first().json.body?.message_id ?? $('Webhook').first().json.message_id ?? 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "original_text",
+              "name": "original_text",
+              "value": "={{ $('Webhook').first().json.body?.post_text ?? $('Webhook').first().json.post_text ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "pdf_path",
+              "name": "pdf_path",
+              "value": "={{ $('Webhook').first().json.body?.pdf_path ?? $('Webhook').first().json.pdf_path ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "extracted_text",
+              "name": "extracted_text",
+              "value": "={{ $('Extract From PDF').first().json.data?.text ?? $('Extract From PDF').first().json.text ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "summary",
+              "name": "summary",
+              "value": "={{ $('OpenAI').first().json.message?.content ?? $('OpenAI').first().json.text ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "value": "pending_review",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-row",
+      "name": "Set row for Postgres",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO posts (source_channel, source_message_id, original_text, pdf_path, extracted_text, summary, status)\nVALUES (\n  '{{ $json.source_channel.replace(/'/g, \"''\") }}',\n  {{ $json.source_message_id }},\n  '{{ ($json.original_text ?? '').replace(/'/g, \"''\") }}',\n  '{{ ($json.pdf_path ?? '').replace(/'/g, \"''\") }}',\n  '{{ ($json.extracted_text ?? '').replace(/'/g, \"''\") }}',\n  '{{ ($json.summary ?? '').replace(/'/g, \"''\") }}',\n  'pending_review'\n)\nRETURNING id",
+        "options": {}
+      },
+      "id": "postgres",
+      "name": "Postgres INSERT RETURNING id",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://editor-bot:8080/incoming/post",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.EDITOR_BOT_WEBHOOK_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ post_id: $json.id, summary: $('Set row for Postgres').first().json.summary ?? '', pdf_path: $('Set row for Postgres').first().json.pdf_path ?? '', original_text: $('Set row for Postgres').first().json.original_text ?? '', source_channel: $('Set row for Postgres').first().json.source_channel ?? '', source_message_id: $('Set row for Postgres').first().json.source_message_id ?? 0 }) }}",
+        "options": {}
+      },
+      "id": "http-bot",
+      "name": "Notify Editor Bot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Read PDF", "type": "main", "index": 0 }]] },
+    "Read PDF": { "main": [[{ "node": "Extract From PDF", "type": "main", "index": 0 }]] },
+    "Extract From PDF": { "main": [[{ "node": "OpenAI", "type": "main", "index": 0 }]] },
+    "OpenAI": { "main": [[{ "node": "Set row for Postgres", "type": "main", "index": 0 }]] },
+    "Set row for Postgres": { "main": [[{ "node": "Postgres INSERT RETURNING id", "type": "main", "index": 0 }]] },
+    "Postgres INSERT RETURNING id": { "main": [[{ "node": "Notify Editor Bot", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "meta": {}
+}

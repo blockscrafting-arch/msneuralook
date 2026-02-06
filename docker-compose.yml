@@ -1,6 +1,8 @@
 # Telegram Parser & Publisher — оркестрация сервисов
 # Запуск: скопировать .env.example в .env, заполнить, затем docker-compose up -d
 
+name: parser
+
 services:
   postgres:
     image: postgres:15-alpine
@@ -37,8 +39,8 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
       - pdf_storage:/data/pdfs:ro
-    ports:
-      - "5678:5678"
+    expose:
+      - "5678"
     depends_on:
       postgres:
         condition: service_healthy
