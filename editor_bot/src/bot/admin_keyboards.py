@@ -36,6 +36,20 @@ ADMIN_KW_BULK = "admin_kw_bulk"
 ADMIN_SCHED = "admin_sched"
 ADMIN_SCHED_REFRESH = "admin_sched_refresh"
 ADMIN_SCHED_EDIT = "admin_sched_edit"
+ADMIN_SCHED_CANCEL = "admin_sched_cancel"
+
+
+def editor_admin_keyboard() -> InlineKeyboardMarkup:
+    """Limited admin menu for editors: no Редакторы, no Админы."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Каналы-источники", callback_data=ADMIN_SRC)],
+        [InlineKeyboardButton(text="Целевые каналы", callback_data=ADMIN_TGT)],
+        [InlineKeyboardButton(text="Группы маркеров", callback_data=ADMIN_KG)],
+        [InlineKeyboardButton(text="Слова-маркеры", callback_data=ADMIN_KW)],
+        [InlineKeyboardButton(text="Отложенные посты", callback_data=ADMIN_SCHED)],
+        [InlineKeyboardButton(text="Промпт OpenAI", callback_data=ADMIN_PROMPT)],
+        [InlineKeyboardButton(text="Закрыть", callback_data=ADMIN_CLOSE)],
+    ])
 
 
 def admin_main_keyboard() -> InlineKeyboardMarkup:
@@ -221,29 +235,16 @@ def admin_scheduled_list_keyboard(
     back: bool = True,
     max_edit_buttons: int = 20,
 ) -> InlineKeyboardMarkup:
-    """Under scheduled list: one button per post [Изменить], then Refresh, Back."""
-    from zoneinfo import ZoneInfo
-
-    MSK = ZoneInfo("Europe/Moscow")
+    """Under scheduled list: per post [Изменить] [Отменить], then Refresh, Back."""
     rows = []
     if posts:
         for p in posts[:max_edit_buttons]:
             pid = getattr(p, "id", None) or (p.get("id") if isinstance(p, dict) else None)
-            sat = getattr(p, "scheduled_at", None) or (p.get("scheduled_at") if isinstance(p, dict) else None)
             if pid is None:
                 continue
-            if sat and hasattr(sat, "astimezone"):
-                fmt = sat.astimezone(MSK).strftime("%d.%m.%Y %H:%M")
-            else:
-                fmt = "?"
-            label = f"Пост #{pid} — {fmt} [Изменить]"
-            if len(label) > 64:
-                label = f"#{pid} {fmt} [Изменить]"
             rows.append([
-                InlineKeyboardButton(
-                    text=label,
-                    callback_data=f"{ADMIN_SCHED_EDIT}_{pid}",
-                ),
+                InlineKeyboardButton(text="Изменить", callback_data=f"{ADMIN_SCHED_EDIT}_{pid}"),
+                InlineKeyboardButton(text="Отменить", callback_data=f"{ADMIN_SCHED_CANCEL}_{pid}"),
             ])
     rows.append([InlineKeyboardButton(text="🔄 Обновить", callback_data=ADMIN_SCHED_REFRESH)])
     if back:

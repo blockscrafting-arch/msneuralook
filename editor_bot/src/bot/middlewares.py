@@ -135,3 +135,52 @@ class AdminOnlyMiddleware(BaseMiddleware):
                 await event.answer("Доступ только у админа.")
             return
         return await handler(event, data)
+
+
+class AdminPanelMiddleware(BaseMiddleware):
+    """Allow editors and admins into admin panel. For callbacks admin_ed* and admin_adm* only admins pass."""
+
+    def __init__(
+        self,
+        pool: Any,
+        super_admin_id: Optional[int] = None,
+    ) -> None:
+        self.pool = pool
+        self.super_admin_id = super_admin_id
+        self._editor_ids: set[int] = set()
+        self._admin_ids: set[int] = set()
+        self._last_refresh: float = 0.0
+
+    async def _refresh_cache(self) -> None:
+        if time.monotonic() - self._last_refresh <= CACHE_TTL_SEC:
+            return
+        self._editor_ids = await get_editor_user_ids(self.pool)
+        self._admin_ids = await get_admin_user_ids(self.pool)
+        if not self._admin_ids and self.super_admin_id is not None:
+            self._admin_ids = {self.super_admin_id}
+        self._last_refresh = time.monotonic()
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: dict[str, Any],
+    ) -> Any:
+        user_id = _get_user_id(event)
+        if user_id is None:
+            return await handler(event, data)
+        await self._refresh_cache()
+        if isinstance(event, CallbackQuery) and event.data:
+            data_str = event.data
+            if data_str.startswith("admin_ed") or data_str.startswith("admin_adm"):
+                if user_id not in self._admin_ids:
+                    await event.answer("Доступ только у администраторов.", show_alert=True)
+                    return
+        if user_id not in self._editor_ids and user_id not in self._admin_ids:
+            log.warning("unauthorized_admin_panel", user_id=user_id)
+            if isinstance(event, CallbackQuery):
+                await event.answer("Доступ только у редактора или админа.", show_alert=True)
+            elif isinstance(event, Message):
+                await event.answer("Доступ только у редактора или админа.")
+            return
+        return await handler(event, data)

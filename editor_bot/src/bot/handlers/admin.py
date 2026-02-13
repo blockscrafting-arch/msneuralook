@@ -14,10 +14,17 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 import structlog
 
-from src.database.repository import add_audit_log, get_post_by_id, get_scheduled_posts_upcoming, update_post_status
+from src.database.repository import (
+    add_audit_log,
+    clear_scheduled_return_to_pending,
+    get_post_by_id,
+    get_scheduled_posts_upcoming,
+    update_post_status,
+)
 from src.database.admin_repository import (
     add_admin,
     add_editor,
+    is_admin,
     add_keyword,
     add_keyword_group,
     add_keywords_bulk,
@@ -60,6 +67,7 @@ from src.bot.admin_keyboards import (
     ADMIN_KW_DEL,
     ADMIN_MAIN,
     ADMIN_SCHED,
+    ADMIN_SCHED_CANCEL,
     ADMIN_SCHED_EDIT,
     ADMIN_SCHED_REFRESH,
     ADMIN_SRC,
@@ -79,6 +87,7 @@ from src.bot.admin_keyboards import (
     admin_keyword_group_detail_keyboard,
     admin_keywords_keyboard,
     admin_main_keyboard,
+    editor_admin_keyboard,
     admin_prompt_keyboard,
     admin_prompt_full_keyboard,
     admin_scheduled_list_keyboard,
@@ -150,24 +159,34 @@ def _normalize_channel_input(text: str) -> str | None:
 
 @router.message(Command("admin"))
 async def cmd_admin(message: Message, state: FSMContext, **kwargs: Any) -> None:
-    """Open admin panel main menu."""
-    data = kwargs
+    """Open admin panel main menu (full for admins, limited for editors)."""
     await state.clear()
+    pool = _pool(kwargs)
+    if not message.from_user:
+        keyboard = editor_admin_keyboard()
+    else:
+        is_admin_ = await is_admin(pool, message.from_user.id) if pool else False
+        keyboard = admin_main_keyboard() if is_admin_ else editor_admin_keyboard()
     await message.answer(
         "— Админ-панель —",
-        reply_markup=admin_main_keyboard(),
+        reply_markup=keyboard,
     )
 
 
 @router.callback_query(F.data == ADMIN_MAIN)
 async def cb_admin_main(callback: CallbackQuery, state: FSMContext, **kwargs: Any) -> None:
-    """Show main admin menu."""
-    data = kwargs
+    """Show main admin menu (full for admins, limited for editors)."""
     await state.clear()
+    pool = _pool(kwargs)
+    if not callback.from_user:
+        keyboard = editor_admin_keyboard()
+    else:
+        is_admin_ = await is_admin(pool, callback.from_user.id) if pool else False
+        keyboard = admin_main_keyboard() if is_admin_ else editor_admin_keyboard()
     await callback.answer()
     await callback.message.edit_text(
         "— Админ-панель —",
-        reply_markup=admin_main_keyboard(),
+        reply_markup=keyboard,
     )
 
 
@@ -1185,6 +1204,46 @@ async def process_editing_scheduled_time(message: Message, state: FSMContext, **
     posts = await get_scheduled_posts_upcoming(pool, limit=50)
     text = _format_scheduled_list(posts)
     await message.answer(text, reply_markup=admin_scheduled_list_keyboard(posts=posts))
+
+
+@router.callback_query(F.data.startswith(ADMIN_SCHED_CANCEL + "_"))
+async def cb_admin_sched_cancel(callback: CallbackQuery, **kwargs: Any) -> None:
+    """Cancel scheduled send: set post to pending_review, clear scheduled_at, refresh list."""
+    data = kwargs
+    pool = _pool(data)
+    if not pool:
+        await callback.answer("Ошибка сервера.", show_alert=True)
+        return
+    raw = callback.data[len(ADMIN_SCHED_CANCEL) + 1 :].strip()
+    try:
+        post_id = int(raw)
+    except ValueError:
+        await callback.answer("Неверные данные.", show_alert=True)
+        return
+    if post_id < 1:
+        await callback.answer("Неверные данные.", show_alert=True)
+        return
+    ok = await clear_scheduled_return_to_pending(pool, post_id)
+    if not ok:
+        await callback.answer("Пост не найден или уже не запланирован.", show_alert=True)
+        return
+    await add_audit_log(
+        pool,
+        post_id,
+        "admin_schedule_cancelled",
+        actor=str(callback.from_user.id) if callback.from_user else None,
+        details={},
+    )
+    await callback.answer("Отложенная отправка отменена.")
+    posts = await get_scheduled_posts_upcoming(pool, limit=50)
+    text = _format_scheduled_list(posts)
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=admin_scheduled_list_keyboard(posts=posts),
+        )
+    except Exception:
+        await callback.message.answer(text, reply_markup=admin_scheduled_list_keyboard(posts=posts))
 
 
 # --- Editors ---

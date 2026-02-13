@@ -1,15 +1,27 @@
 """Handlers for /start, /status, /help."""
 
-from aiogram import Router
-from aiogram.types import Message
+from aiogram import F, Router
+from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
 from aiogram.filters import Command
 import structlog
 
+from src.database.admin_repository import is_admin
 from src.database.repository import get_post_counts_by_status
+from src.bot.admin_keyboards import admin_main_keyboard, editor_admin_keyboard
 
 log = structlog.get_logger()
 
 router = Router(name="commands")
+
+ADMIN_BUTTON_TEXT = "Админка"
+
+
+def admin_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Reply keyboard with single 'Админка' button (shown at bottom)."""
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=ADMIN_BUTTON_TEXT)]],
+        resize_keyboard=True,
+    )
 
 
 @router.message(Command("start"))
@@ -17,8 +29,27 @@ async def cmd_start(message: Message) -> None:
     """Respond to /start."""
     await message.answer(
         "Бот для утверждения постов. Новые посты с саммари приходят с кнопками: "
-        "Опубликовать, Редактировать, Отклонить."
+        "Опубликовать, Редактировать, Отклонить.",
+        reply_markup=admin_reply_keyboard(),
     )
+
+
+@router.message(F.text == ADMIN_BUTTON_TEXT)
+async def cmd_admin_button(message: Message, **kwargs: object) -> None:
+    """Open admin panel: full menu for admins, limited for editors."""
+    pool = kwargs.get("pool")
+    if not pool:
+        await message.answer("Ошибка сервера.")
+        return
+    if not message.from_user:
+        await message.answer("Ошибка.")
+        return
+    is_admin_ = await is_admin(pool, message.from_user.id)
+    text = "— Админ-панель —"
+    if is_admin_:
+        await message.answer(text, reply_markup=admin_main_keyboard())
+    else:
+        await message.answer(text, reply_markup=editor_admin_keyboard())
 
 
 @router.message(Command("help"))
@@ -27,7 +58,9 @@ async def cmd_help(message: Message) -> None:
     await message.answer(
         "Команды: /start, /help, /status. "
         "Когда приходит пост на утверждение — используйте кнопки под сообщением. "
-        "Админы: /admin — настройки каналов, целевого канала, редакторов и админов."
+        "Кнопка «Админка» или /admin — панель настроек (каналы, маркеры, отложенные посты, промпт). "
+        "Доступна редакторам и админам; разделы «Редакторы» и «Админы» — только у админов.",
+        reply_markup=admin_reply_keyboard(),
     )
 
 

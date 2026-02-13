@@ -17,7 +17,7 @@ from src.utils.logging import configure_logging
 from src.database.connection import create_pool_with_retry, close_pool
 from src.database.admin_repository import bootstrap_admin_editor, get_config_value, set_config_value
 from src.bot.handlers import admin, commands, review
-from src.bot.middlewares import AdminOnlyMiddleware, DataInjectionMiddleware, EditorOnlyMiddleware
+from src.bot.middlewares import AdminPanelMiddleware, DataInjectionMiddleware, EditorOnlyMiddleware
 from src.services.scheduler import run_scheduler
 from src.utils.alert import send_alert
 from src.webhook.n8n_receiver import create_app
@@ -112,14 +112,14 @@ def main() -> None:
             alert_chat_id=config.ALERT_CHAT_ID,
         )
         editor_only = EditorOnlyMiddleware(pool, fallback_editor_chat_id=config.EDITOR_CHAT_ID)
-        admin_only = AdminOnlyMiddleware(pool, super_admin_id=config.EDITOR_CHAT_ID)
+        admin_panel = AdminPanelMiddleware(pool, super_admin_id=config.EDITOR_CHAT_ID)
         dp.update.middleware(inject)
         dp.message.middleware(editor_only)
         dp.callback_query.middleware(editor_only)
         dp.include_router(commands.router)
         dp.include_router(review.router)
-        admin.router.message.middleware(admin_only)
-        admin.router.callback_query.middleware(admin_only)
+        admin.router.message.middleware(admin_panel)
+        admin.router.callback_query.middleware(admin_panel)
         dp.include_router(admin.router)
 
         path = config.EDITOR_BOT_WEBHOOK_PATH.strip() or "/incoming/post"
