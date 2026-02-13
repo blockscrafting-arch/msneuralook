@@ -31,6 +31,7 @@ ADMIN_KG_ADD = "admin_kg_add"
 ADMIN_KG_DEL = "admin_kg_del"  # + _id
 ADMIN_KG_OPEN = "admin_kg_open"  # + _id
 ADMIN_KG_ADD_KW = "admin_kg_ak"  # + _id  (add keyword to group)
+ADMIN_KG_BULK = "admin_kg_bulk"  # + _id  (add list to this group)
 ADMIN_KW_BULK = "admin_kw_bulk"
 ADMIN_SCHED = "admin_sched"
 ADMIN_SCHED_REFRESH = "admin_sched_refresh"
@@ -209,6 +210,7 @@ def admin_keyword_group_detail_keyboard(
     if len(keywords_in_group) > 15:
         rows.append([InlineKeyboardButton(text="…", callback_data="admin_noop")])
     rows.append([InlineKeyboardButton(text="➕ Добавить маркер в группу", callback_data=f"{ADMIN_KG_ADD_KW}_{group_id}")])
+    rows.append([InlineKeyboardButton(text="📋 Добавить списком", callback_data=f"{ADMIN_KG_BULK}_{group_id}")])
     if back:
         rows.append([InlineKeyboardButton(text="Назад", callback_data=ADMIN_KG)])
     return InlineKeyboardMarkup(inline_keyboard=rows)

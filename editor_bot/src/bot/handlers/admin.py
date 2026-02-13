@@ -51,6 +51,7 @@ from src.bot.admin_keyboards import (
     ADMIN_KG,
     ADMIN_KG_ADD,
     ADMIN_KG_ADD_KW,
+    ADMIN_KG_BULK,
     ADMIN_KG_DEL,
     ADMIN_KG_OPEN,
     ADMIN_KW,
@@ -932,6 +933,33 @@ async def cb_admin_kg_del(callback: CallbackQuery, **kwargs: Any) -> None:
 
 
 # --- Bulk keywords ---
+
+
+@router.callback_query(F.data.startswith(ADMIN_KG_BULK + "_"))
+async def cb_admin_kg_bulk(callback: CallbackQuery, state: FSMContext, **kwargs: Any) -> None:
+    """Start bulk add for this group: set bulk_group_id and ask for list (no group choice)."""
+    data = kwargs
+    pool = _pool(data)
+    if not pool:
+        await callback.answer("Ошибка сервера.", show_alert=True)
+        return
+    raw = callback.data[len(ADMIN_KG_BULK) + 1 :].strip()
+    try:
+        gid = int(raw)
+    except ValueError:
+        await callback.answer("Неверные данные.", show_alert=True)
+        return
+    if gid < 1:
+        await callback.answer("Неверные данные.", show_alert=True)
+        return
+    group = await get_keyword_group_by_id(pool, gid)
+    if not group:
+        await callback.answer("Группа не найдена.", show_alert=True)
+        return
+    await state.update_data(bulk_group_id=gid)
+    await state.set_state(AdminStates.adding_keywords_bulk)
+    await callback.answer()
+    await callback.message.answer("Введите список слов через запятую или с новой строки:")
 
 
 @router.callback_query(F.data == ADMIN_KW_BULK)
