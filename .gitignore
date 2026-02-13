@@ -53,6 +53,9 @@ shared/pdf_storage/*
 nginx/certbot/
 *.log
 
+# Документация / markdown (не в репозитории)
+*.md
+
 # Office / бинарные документы (не в репозитории)
 *.docx
 *.xlsx
