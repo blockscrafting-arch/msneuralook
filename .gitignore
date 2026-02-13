@@ -1,7 +1,8 @@
-# Secrets and env
+# Secrets and env (никогда не коммитить!)
 .env
 .env.local
 .env.*.local
+# .env.example — разрешён, шаблон без секретов
 *.session
 *.session-journal
 
@@ -41,11 +42,26 @@ ENV/
 # Docker
 docker-compose.override.yml
 
+# Node / n8n (если запуск локально)
+node_modules/
+.n8n/
+
 # Project-specific
 shared/pdf_storage/*
 !shared/pdf_storage/.gitkeep
 nginx/certbot/
 *.log
+
+# Office / бинарные документы (не в репозитории)
+*.docx
+*.xlsx
+*.doc
+
+# Временные и бэкапы
+*.bak
+*~
+*.backup
+*.tmp
 
 # Testing
 .pytest_cache/
