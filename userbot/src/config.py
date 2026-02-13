@@ -1,5 +1,7 @@
 """Configuration loaded from environment (pydantic Settings)."""
 
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,8 +19,11 @@ class Settings(BaseSettings):
     TELEGRAM_API_HASH: str
     TELEGRAM_SESSION_STRING: str
 
-    # Source channel to monitor (username or -100... ID)
-    SOURCE_CHANNEL: str
+    # PostgreSQL (to read source_channels for monitoring)
+    DATABASE_URL: str
+
+    # Fallback source channel when DB has no channels (optional)
+    SOURCE_CHANNEL: Optional[str] = None
 
     # n8n webhook URL (POST here when new PDF post appears)
     N8N_WEBHOOK_URL: str
@@ -26,6 +31,13 @@ class Settings(BaseSettings):
     # Path to directory where PDFs are saved (in Docker: /data/pdfs)
     PDF_STORAGE_PATH: str = "/data/pdfs"
 
-    def get_source_channel_id_or_username(self) -> str:
-        """Return SOURCE_CHANNEL as-is (username or numeric string)."""
-        return self.SOURCE_CHANNEL.strip()
+    # Internal API for editor-bot: resolve discussion message id (MTProto)
+    USERBOT_API_PORT: int = 8081
+    USERBOT_API_TOKEN: Optional[str] = None
+
+    # Прокси для MTProto (Telegram). Если пусто — используется HTTP_PROXY из env.
+    TELEGRAM_PROXY: Optional[str] = None
+
+    def get_source_channel_fallback(self) -> str:
+        """Return SOURCE_CHANNEL as-is for fallback when DB is empty."""
+        return (self.SOURCE_CHANNEL or "").strip()

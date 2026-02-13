@@ -1,0 +1,3 @@
+# Shell scripts must use LF so they run on Linux (e.g. server, cron).
+# Fixes "required file not found" when shebang has CRLF.
+*.sh text eol=lf

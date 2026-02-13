@@ -1,5 +1,6 @@
 """Download PDF from Telegram to local storage."""
 
+import asyncio
 from pathlib import Path
 
 import structlog
@@ -9,6 +10,9 @@ log = structlog.get_logger()
 
 # MIME type for PDF
 PDF_MIME = "application/pdf"
+PDF_DOWNLOAD_TIMEOUT_SEC = 180
+PDF_DOWNLOAD_RETRIES = 3
+PDF_DOWNLOAD_RETRY_DELAY_SEC = 5
 
 
 def get_pdf_document(message: Message) -> Document | None:
@@ -70,16 +74,44 @@ async def download_pdf_to_storage(
     safe_name = f"{chat_id}_{message.id}.pdf"
     file_path = base_dir / safe_name
 
-    try:
-        await client.download_media(message.media, file=str(file_path))
-        if file_path.is_file():
-            log.info("pdf_downloaded", path=str(file_path), message_id=message.id)
-            return str(file_path)
-    except Exception as e:
-        log.error(
-            "pdf_download_failed",
-            message_id=message.id,
-            exc_info=True,
-            error=str(e),
-        )
+    last_error: Exception | None = None
+    for attempt in range(PDF_DOWNLOAD_RETRIES):
+        if attempt > 0:
+            log.warning(
+                "pdf_download_retry",
+                message_id=message.id,
+                attempt=attempt + 1,
+                max_attempts=PDF_DOWNLOAD_RETRIES,
+            )
+            await asyncio.sleep(PDF_DOWNLOAD_RETRY_DELAY_SEC)
+        try:
+            await asyncio.wait_for(
+                client.download_media(message.media, file=str(file_path)),
+                timeout=PDF_DOWNLOAD_TIMEOUT_SEC,
+            )
+            if file_path.is_file():
+                log.info("pdf_downloaded", path=str(file_path), message_id=message.id)
+                return str(file_path)
+        except asyncio.TimeoutError as e:
+            last_error = e
+            log.warning(
+                "pdf_download_failed",
+                message_id=message.id,
+                attempt=attempt + 1,
+                error="timeout",
+            )
+        except Exception as e:
+            last_error = e
+            log.warning(
+                "pdf_download_failed",
+                message_id=message.id,
+                attempt=attempt + 1,
+                error=str(e),
+            )
+    log.error(
+        "pdf_download_failed",
+        message_id=message.id,
+        error=str(last_error),
+        exc_info=True,
+    )
     return None

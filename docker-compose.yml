@@ -4,6 +4,7 @@
 name: parser
 
 services:
+  # Данные БД в volume postgres_data. Перед обновлением образа/ОС рекомендуется бэкап: ./scripts/backup_db.sh (см. docs/backup_restore.md)
   postgres:
     image: postgres:15-alpine
     container_name: parser_postgres
@@ -35,7 +36,20 @@ services:
       N8N_HOST: ${N8N_HOST:-n8n.neurascope.pro}
       N8N_PROTOCOL: ${N8N_PROTOCOL:-https}
       N8N_PORT: 5678
+      N8N_PROXY_HOPS: "1"
       WEBHOOK_URL: ${N8N_PROTOCOL:-https}://${N8N_HOST:-n8n.neurascope.pro}/
+      # Токен для workflow: заголовок Authorization к editor-bot ($env.EDITOR_BOT_WEBHOOK_TOKEN)
+      EDITOR_BOT_WEBHOOK_TOKEN: ${EDITOR_BOT_WEBHOOK_TOKEN:-}
+      # Разрешить нодам читать переменные окружения
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      # Разрешить Read Binary File читать PDF из /data/pdfs
+      N8N_RESTRICT_FILE_ACCESS_TO: "/home/node/.n8n-files;/data/pdfs"
+      # Прокси для исходящих запросов (OpenAI и др.). Задать в .env: HTTP_PROXY, HTTPS_PROXY
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      # Не проксировать запросы к editor-bot (иначе 502)
+      NO_PROXY: "editor-bot,localhost,127.0.0.1,.local"
+      no_proxy: "editor-bot,localhost,127.0.0.1,.local"
     volumes:
       - n8n_data:/home/node/.n8n
       - pdf_storage:/data/pdfs:ro
@@ -53,12 +67,19 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-parser_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-parser_db}
       N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL}
-      SOURCE_CHANNEL: ${SOURCE_CHANNEL}
+      SOURCE_CHANNEL: ${SOURCE_CHANNEL:-}
       TELEGRAM_API_ID: ${TELEGRAM_API_ID}
       TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
       TELEGRAM_SESSION_STRING: ${TELEGRAM_SESSION_STRING}
       PDF_STORAGE_PATH: /data/pdfs
+      USERBOT_API_PORT: ${USERBOT_API_PORT:-8081}
+      USERBOT_API_TOKEN: ${USERBOT_API_TOKEN:-}
+      TELEGRAM_PROXY: ${TELEGRAM_PROXY:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+    expose:
+      - "8081"
     volumes:
       - pdf_storage:/data/pdfs
     depends_on:
@@ -78,6 +99,10 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-parser_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-parser_db}
       EDITOR_BOT_WEBHOOK_PATH: ${EDITOR_BOT_WEBHOOK_PATH:-/incoming/post}
       PDF_STORAGE_PATH: /data/pdfs
+      USERBOT_API_URL: ${USERBOT_API_URL:-http://userbot:8081}
+      USERBOT_API_TOKEN: ${USERBOT_API_TOKEN:-}
+      TELEGRAM_PROXY: ${TELEGRAM_PROXY:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
     volumes:
       - pdf_storage:/data/pdfs:ro
     depends_on:

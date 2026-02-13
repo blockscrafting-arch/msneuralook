@@ -6,7 +6,7 @@ CREATE TABLE posts (
     source_channel TEXT NOT NULL,
     source_message_id BIGINT NOT NULL,
     original_text TEXT,
-    pdf_path TEXT NOT NULL,
+    pdf_path TEXT DEFAULT '',
     extracted_text TEXT,
     summary TEXT,
     edited_summary TEXT,
@@ -44,3 +44,27 @@ CREATE TABLE audit_log (
 
 CREATE INDEX idx_audit_log_post_id ON audit_log(post_id);
 CREATE INDEX idx_audit_log_created_at ON audit_log(created_at);
+
+-- Admin panel: source channels, admins, editors
+CREATE TABLE source_channels (
+    id SERIAL PRIMARY KEY,
+    channel_identifier TEXT NOT NULL UNIQUE,
+    display_name TEXT DEFAULT '',
+    is_active BOOLEAN DEFAULT TRUE,
+    added_by BIGINT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE admins (
+    user_id BIGINT PRIMARY KEY,
+    username TEXT DEFAULT '',
+    added_by BIGINT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE editors (
+    user_id BIGINT PRIMARY KEY,
+    username TEXT DEFAULT '',
+    added_by BIGINT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
