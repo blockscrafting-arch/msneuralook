@@ -49,6 +49,7 @@ node_modules/
 # Project-specific
 shared/pdf_storage/*
 !shared/pdf_storage/.gitkeep
+!shared/pdf_storage/README.md
 nginx/certbot/
 *.log
 
