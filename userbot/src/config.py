@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # Прокси для MTProto (Telegram). Если пусто — используется HTTP_PROXY из env.
     TELEGRAM_PROXY: Optional[str] = None
 
+    # Буфер outbox: пауза в минутах между отправкой постов в n8n; 0 — отключено.
+    OUTBOX_BUFFER_MINUTES: int = 0
+
     def get_source_channel_fallback(self) -> str:
         """Return SOURCE_CHANNEL as-is for fallback when DB is empty."""
         return (self.SOURCE_CHANNEL or "").strip()

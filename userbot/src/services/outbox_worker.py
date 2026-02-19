@@ -19,15 +19,21 @@ OUTBOX_POLL_INTERVAL_SEC = 30
 OUTBOX_TABLE_MISSING_LOG_INTERVAL_SEC = 300  # remind once per 5 min
 
 
-async def run_outbox_worker(pool: asyncpg.Pool, webhook_url: str) -> None:
+async def run_outbox_worker(
+    pool: asyncpg.Pool,
+    webhook_url: str,
+    buffer_minutes: int = 0,
+) -> None:
     """
     Loop: fetch pending outbox rows, POST to n8n, mark sent or failed with backoff.
     Runs until cancelled. If table userbot_outbox is missing, logs a hint and keeps running.
+    If buffer_minutes > 0: one post per cycle, then sleep buffer_minutes before next cycle.
     """
     last_table_missing_log = 0.0
+    batch_limit = 1 if buffer_minutes > 0 else 10
     while True:
         try:
-            batch = await get_pending_outbox_batch(pool, limit=10)
+            batch = await get_pending_outbox_batch(pool, limit=batch_limit)
             for row in batch:
                 ok = await send_to_n8n_webhook(
                     webhook_url,
@@ -40,6 +46,8 @@ async def run_outbox_worker(pool: asyncpg.Pool, webhook_url: str) -> None:
                 if ok:
                     await mark_outbox_sent(pool, row["id"])
                     log.info("outbox_sent", outbox_id=row["id"], message_id=row["message_id"])
+                    if buffer_minutes > 0:
+                        await asyncio.sleep(buffer_minutes * 60)
                 else:
                     attempts = (row.get("attempts") or 0) + 1
                     await mark_outbox_failed(

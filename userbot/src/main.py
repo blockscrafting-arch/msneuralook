@@ -62,7 +62,11 @@ def main() -> None:
                 await site.start()
                 log.info("userbot_api_started", port=config.USERBOT_API_PORT)
                 worker_task = asyncio.create_task(
-                    run_outbox_worker(pool, config.N8N_WEBHOOK_URL),
+                    run_outbox_worker(
+                        pool,
+                        config.N8N_WEBHOOK_URL,
+                        buffer_minutes=config.OUTBOX_BUFFER_MINUTES,
+                    ),
                 )
                 try:
                     await client.run_until_disconnected()

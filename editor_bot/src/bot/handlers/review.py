@@ -376,6 +376,9 @@ async def process_edited_text(message: Message, state: FSMContext, **kwargs: Any
             f"Обновлённый текст:\n{html.escape(strip_markdown_asterisks(post.display_summary() or ''))}\n\n"
             f"Источник: {post.source_channel} / msg #{post.source_message_id}"
         )
-        await message.answer(text, reply_markup=review_keyboard(post_id))
+        chunks = split_text(text) or [text]
+        await message.answer(chunks[0], reply_markup=review_keyboard(post_id))
+        for part in chunks[1:]:
+            await message.answer(part)
     else:
         await message.answer("Пост не найден.")
