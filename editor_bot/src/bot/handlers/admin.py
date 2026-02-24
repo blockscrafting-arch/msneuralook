@@ -637,8 +637,10 @@ async def cb_admin_keywords(callback: CallbackQuery, state: FSMContext, **kwargs
     if not keywords:
         text += "Нет маркеров. Если список пуст — все посты проходят. Добавьте маркер для фильтрации."
     else:
-        for kw in keywords:
+        for kw in keywords[:100]:
             text += f"• {_esc(kw.get('word', ''))}\n"
+        if len(keywords) > 100:
+            text += f"\n...и еще {len(keywords) - 100} маркеров."
     await callback.message.edit_text(
         text,
         reply_markup=admin_keywords_keyboard(keywords),
@@ -717,8 +719,10 @@ async def cb_admin_kw_del(callback: CallbackQuery, **kwargs: Any) -> None:
         if not keywords:
             text += "Нет маркеров. Все посты проходят."
         else:
-            for kw in keywords:
+            for kw in keywords[:100]:
                 text += f"• {_esc(kw.get('word', ''))}\n"
+            if len(keywords) > 100:
+                text += f"\n...и еще {len(keywords) - 100} маркеров."
         await callback.message.edit_text(
             text,
             reply_markup=admin_keywords_keyboard(keywords),
