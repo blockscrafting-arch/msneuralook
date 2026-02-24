@@ -42,6 +42,7 @@ from src.database.admin_repository import (
     remove_admin,
     remove_editor,
     remove_keyword,
+    remove_all_keywords_in_group,
     remove_keyword_group,
     remove_source_channel,
     remove_target_channel,
@@ -59,6 +60,8 @@ from src.bot.admin_keyboards import (
     ADMIN_KG_ADD,
     ADMIN_KG_ADD_KW,
     ADMIN_KG_BULK,
+    ADMIN_KG_SHOW_ALL,
+    ADMIN_KG_CLEAR,
     ADMIN_KG_DEL,
     ADMIN_KG_OPEN,
     ADMIN_KW,
@@ -875,8 +878,10 @@ async def cb_admin_kg_open(callback: CallbackQuery, state: FSMContext, **kwargs:
     if not keywords:
         text += "Нет маркеров. Добавьте маркер в группу."
     else:
-        for kw in keywords:
+        for kw in keywords[:100]:
             text += f"• {_esc(kw.get('word', ''))}\n"
+        if len(keywords) > 100:
+            text += f"\n...и еще {len(keywords) - 100} маркеров (нажмите «Вывести списком»)."
     await callback.answer()
     await callback.message.edit_text(
         text,
@@ -949,6 +954,93 @@ async def cb_admin_kg_del(callback: CallbackQuery, **kwargs: Any) -> None:
         )
     else:
         await callback.answer("Группа не найдена.", show_alert=True)
+
+
+@router.callback_query(F.data.startswith(ADMIN_KG_SHOW_ALL + "_"))
+async def cb_admin_kg_show_all(callback: CallbackQuery, **kwargs: Any) -> None:
+    """Show all keywords of a group in a separate message."""
+    data = kwargs
+    pool = _pool(data)
+    if not pool:
+        await callback.answer("Ошибка сервера.", show_alert=True)
+        return
+    raw = callback.data[len(ADMIN_KG_SHOW_ALL) + 1 :].strip()
+    try:
+        gid = int(raw)
+    except ValueError:
+        await callback.answer("Неверные данные.", show_alert=True)
+        return
+    group = await get_keyword_group_by_id(pool, gid)
+    if not group:
+        await callback.answer("Группа не найдена.", show_alert=True)
+        return
+    keywords = await get_keywords_by_group_id(pool, gid)
+    if not keywords:
+        await callback.answer("В этой группе нет маркеров.", show_alert=True)
+        return
+        
+    await callback.answer()
+    
+    escaped_words = [_esc(kw.get("word", "")) for kw in keywords]
+    header = f"Все маркеры группы «{_esc(group.get('name', ''))}»:\n\n"
+    
+    # Telegram max message length is 4096. Split if necessary.
+    max_len = 4000
+    chunk = ""
+    is_first = True
+    for w in escaped_words:
+        if len(chunk) + len(w) + 1 > max_len:
+            if is_first:
+                await callback.message.answer(header + f"<pre>{chunk}</pre>")
+                is_first = False
+            else:
+                await callback.message.answer(f"<pre>{chunk}</pre>")
+            chunk = w
+        else:
+            chunk += "\n" + w if chunk else w
+            
+    if chunk:
+        if is_first:
+            await callback.message.answer(header + f"<pre>{chunk}</pre>")
+        else:
+            await callback.message.answer(f"<pre>{chunk}</pre>")
+
+
+@router.callback_query(F.data.startswith(ADMIN_KG_CLEAR + "_"))
+async def cb_admin_kg_clear(callback: CallbackQuery, **kwargs: Any) -> None:
+    """Remove all keywords from a group."""
+    data = kwargs
+    pool = _pool(data)
+    if not pool:
+        await callback.answer("Ошибка сервера.", show_alert=True)
+        return
+    raw = callback.data[len(ADMIN_KG_CLEAR) + 1 :].strip()
+    try:
+        gid = int(raw)
+    except ValueError:
+        await callback.answer("Неверные данные.", show_alert=True)
+        return
+    group = await get_keyword_group_by_id(pool, gid)
+    if not group:
+        await callback.answer("Группа не найдена.", show_alert=True)
+        return
+    
+    deleted_count = await remove_all_keywords_in_group(pool, gid)
+    await add_audit_log(
+        pool, None, "admin_clear_keyword_group",
+        actor=str(callback.from_user.id) if callback.from_user else None,
+        details={"group_id": gid, "deleted_count": deleted_count},
+    )
+    await callback.answer(f"Удалено маркеров: {deleted_count}", show_alert=True)
+    
+    # Update current message
+    keywords = await get_keywords_by_group_id(pool, gid)
+    text = f"Группа: {_esc(group.get('name', ''))}\nКанал: {_esc(group.get('channel_display_name') or group.get('channel_identifier') or '')}\n\nМаркеры:\n"
+    text += "Нет маркеров. Добавьте маркер в группу."
+    await callback.message.edit_text(
+        text,
+        reply_markup=admin_keyword_group_detail_keyboard(gid, keywords),
+    )
 
 
 # --- Bulk keywords ---

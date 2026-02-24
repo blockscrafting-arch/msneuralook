@@ -32,6 +32,8 @@ ADMIN_KG_DEL = "admin_kg_del"  # + _id
 ADMIN_KG_OPEN = "admin_kg_open"  # + _id
 ADMIN_KG_ADD_KW = "admin_kg_ak"  # + _id  (add keyword to group)
 ADMIN_KG_BULK = "admin_kg_bulk"  # + _id  (add list to this group)
+ADMIN_KG_SHOW_ALL = "admin_kg_showall"  # + _id  (show all as list)
+ADMIN_KG_CLEAR = "admin_kg_clear"  # + _id  (remove all keywords from group)
 ADMIN_KW_BULK = "admin_kw_bulk"
 ADMIN_SCHED = "admin_sched"
 ADMIN_SCHED_REFRESH = "admin_sched_refresh"
@@ -225,6 +227,10 @@ def admin_keyword_group_detail_keyboard(
         rows.append([InlineKeyboardButton(text="…", callback_data="admin_noop")])
     rows.append([InlineKeyboardButton(text="➕ Добавить маркер в группу", callback_data=f"{ADMIN_KG_ADD_KW}_{group_id}")])
     rows.append([InlineKeyboardButton(text="📋 Добавить списком", callback_data=f"{ADMIN_KG_BULK}_{group_id}")])
+    rows.append([
+        InlineKeyboardButton(text="📄 Вывести списком", callback_data=f"{ADMIN_KG_SHOW_ALL}_{group_id}"),
+        InlineKeyboardButton(text="🗑 Очистить группу", callback_data=f"{ADMIN_KG_CLEAR}_{group_id}")
+    ])
     if back:
         rows.append([InlineKeyboardButton(text="Назад", callback_data=ADMIN_KG)])
     return InlineKeyboardMarkup(inline_keyboard=rows)

@@ -425,6 +425,15 @@ async def remove_keyword(pool: asyncpg.Pool, keyword_id: int) -> bool:
     return result == "DELETE 1"
 
 
+async def remove_all_keywords_in_group(pool: asyncpg.Pool, group_id: int) -> int:
+    """Delete all keywords that belong to the given group. Returns number of deleted rows."""
+    try:
+        result = await pool.execute("DELETE FROM keywords WHERE group_id = $1", group_id)
+        return int(result.split()[1])
+    except Exception:
+        return 0
+
+
 async def get_keywords_by_group_id(pool: asyncpg.Pool, group_id: int) -> list[dict]:
     """Return keywords that belong to the given group (for group detail screen)."""
     try:
