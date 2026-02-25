@@ -993,7 +993,8 @@ async def cb_admin_kg_show_all(callback: CallbackQuery, **kwargs: Any) -> None:
     chunk = ""
     is_first = True
     for w in escaped_words:
-        if len(chunk) + len(w) + 1 > max_len:
+        separator = ", " if chunk else ""
+        if len(chunk) + len(separator) + len(w) > max_len:
             if is_first:
                 await callback.message.answer(header + f"<pre>{chunk}</pre>")
                 is_first = False
@@ -1001,7 +1002,7 @@ async def cb_admin_kg_show_all(callback: CallbackQuery, **kwargs: Any) -> None:
                 await callback.message.answer(f"<pre>{chunk}</pre>")
             chunk = w
         else:
-            chunk += "\n" + w if chunk else w
+            chunk += separator + w
             
     if chunk:
         if is_first:
