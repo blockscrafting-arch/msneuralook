@@ -62,7 +62,13 @@ async def run_scheduler(
                         alert_chat_id=alert_chat_id,
                     )
             for post in posts:
-                text_for_routing = (post.original_text or "") + " " + (post.display_summary() or "")
+                text_for_routing = (
+                    (post.original_text or "")
+                    + " "
+                    + (post.display_summary() or "")
+                    + " "
+                    + (post.extracted_text or "")
+                )
                 channel_ids = await get_channel_ids_for_publish(
                     pool, text_for_routing, fallback_channel_from_config=fallback_channel
                 )

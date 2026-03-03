@@ -109,7 +109,13 @@ async def cb_approve(callback: CallbackQuery, **kwargs: Any) -> None:
         )
         await callback.answer("Пост уже обработан или не найден.", show_alert=True)
         return
-    text_for_routing = (post.original_text or "") + " " + (post.display_summary() or "")
+    text_for_routing = (
+        (post.original_text or "")
+        + " "
+        + (post.display_summary() or "")
+        + " "
+        + (post.extracted_text or "")
+    )
     fallback = await get_config_value(pool, "target_channel") or data.get("target_channel_id") or ""
     channel_ids = await get_channel_ids_for_publish(
         pool, text_for_routing, fallback_channel_from_config=fallback.strip() or None
