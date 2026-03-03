@@ -47,8 +47,8 @@ async def test_publish_to_channel_sends_text_then_pdf_with_reply() -> None:
 
 
 @pytest.mark.asyncio
-async def test_publish_to_channel_caption_sent_without_asterisks() -> None:
-    """Caption has ** and * stripped before sending; no raw asterisks in message."""
+async def test_publish_to_channel_caption_sent_as_safe_html() -> None:
+    """Caption is converted to safe HTML (bold/italic); sent message contains tags or plain fallback."""
     bot = MagicMock()
     bot.send_message = AsyncMock(return_value=MagicMock(message_id=1))
     await publish_to_channel(
@@ -56,8 +56,9 @@ async def test_publish_to_channel_caption_sent_without_asterisks() -> None:
     )
     bot.send_message.assert_called_once()
     sent_text = bot.send_message.call_args[0][1]
-    assert "*" not in sent_text
     assert "bold" in sent_text and "italic" in sent_text
+    # Either HTML tags present or plain (no raw ** / * in HTML path)
+    assert "<b>" in sent_text or "*" not in sent_text
 
 
 @pytest.mark.asyncio

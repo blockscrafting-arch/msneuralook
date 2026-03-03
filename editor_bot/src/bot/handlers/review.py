@@ -22,7 +22,7 @@ from src.database.admin_repository import get_channel_ids_for_publish, get_confi
 from src.bot.keyboards import review_keyboard, schedule_actions_keyboard
 from src.bot.states import EditSummaryStates, ScheduleStates
 from src.services.publisher import publish_to_all_channels
-from src.utils.text import split_text, strip_markdown_asterisks, SUMMARY_MAX_LENGTH
+from src.utils.text import split_html_safe, summary_to_safe_html, SUMMARY_MAX_LENGTH
 
 MSK = ZoneInfo("Europe/Moscow")
 SCHEDULE_PATTERN = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2})$")
@@ -56,8 +56,10 @@ async def _send_post_to_editor(
     pool,
 ) -> int | None:
     """Send full summary (chunked if needed) with keyboard, then PDF as reply to first message. Returns message_id of first message or None."""
-    text = f"Новый пост!\n\nТекст (саммари):\n{html.escape(strip_markdown_asterisks(summary or ''))}"
-    chunks = split_text(text) or [text]
+    header = html.escape("Новый пост!\n\nТекст (саммари):\n")
+    body_html = summary_to_safe_html(summary or "")
+    text = header + body_html
+    chunks = split_html_safe(text) or [text]
     kb = review_keyboard(post_id)
     try:
         import os
@@ -371,12 +373,11 @@ async def process_edited_text(message: Message, state: FSMContext, **kwargs: Any
     await state.clear()
     post = await get_post_by_id(pool, post_id)
     if post:
-        text = (
-            f"Пост #{post_id}\n\n"
-            f"Обновлённый текст:\n{html.escape(strip_markdown_asterisks(post.display_summary() or ''))}\n\n"
-            f"Источник: {post.source_channel} / msg #{post.source_message_id}"
-        )
-        chunks = split_text(text) or [text]
+        header = html.escape(f"Пост #{post_id}\n\nОбновлённый текст:\n")
+        footer = html.escape(f"\n\nИсточник: {post.source_channel} / msg #{post.source_message_id}")
+        body_html = summary_to_safe_html(post.display_summary() or "")
+        text = header + body_html + footer
+        chunks = split_html_safe(text) or [text]
         await message.answer(chunks[0], reply_markup=review_keyboard(post_id))
         for part in chunks[1:]:
             await message.answer(part)

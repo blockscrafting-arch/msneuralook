@@ -1,7 +1,6 @@
 """Publish approved post to target Telegram channel."""
 
 import asyncio
-import html
 import os
 from typing import Any, Callable, Coroutine
 
@@ -9,7 +8,7 @@ from aiogram import Bot
 from aiogram.types import FSInputFile
 import structlog
 
-from src.utils.text import split_text, strip_markdown_asterisks
+from src.utils.text import split_html_safe, strip_safe_html_to_plain, summary_to_safe_html
 from src.services.discussion_client import resolve_discussion
 
 log = structlog.get_logger()
@@ -127,12 +126,37 @@ async def publish_to_channel(
     if pdf_path.strip() and not _is_path_safe(pdf_path, pdf_storage_path):
         raise ValueError("pdf_path is outside allowed storage directory")
 
-    caption = html.escape(strip_markdown_asterisks(caption or ""))
-    chunks = split_text(caption) or [caption]
-    first_msg = await _send_channel_with_retry(lambda: bot.send_message(channel, chunks[0]))
+    caption_raw = caption or ""
+    html_caption = summary_to_safe_html(caption_raw)
+    chunks = split_html_safe(html_caption) or [html_caption or ""]
+    if not chunks:
+        chunks = [""]
+
+    def _send_chunk(chunk: str, use_html: bool = True):
+        if use_html and chunk.strip():
+            return bot.send_message(channel, chunk)
+        plain = strip_safe_html_to_plain(chunk) if chunk else chunk
+        return bot.send_message(channel, plain or "", parse_mode=None)
+
+    first_chunk = chunks[0]
+    try:
+        first_msg = await _send_channel_with_retry(lambda: _send_chunk(first_chunk))
+    except Exception as e:
+        if "parse" in str(e).lower() or "entities" in str(e).lower():
+            log.warning("publish_html_fallback_plain", channel=channel, error=str(e))
+            first_msg = await _send_channel_with_retry(lambda: _send_chunk(first_chunk, use_html=False))
+        else:
+            raise
     channel_message_id = first_msg.message_id
     for part in chunks[1:]:
-        await _send_channel_with_retry(lambda p=part: bot.send_message(channel, p))
+        try:
+            await _send_channel_with_retry(lambda p=part: _send_chunk(p))
+        except Exception as e:
+            if "parse" in str(e).lower() or "entities" in str(e).lower():
+                log.warning("publish_html_fallback_plain_chunk", channel=channel, error=str(e))
+                await _send_channel_with_retry(lambda p=part: _send_chunk(p, use_html=False))
+            else:
+                raise
 
     if pdf_path and os.path.isfile(pdf_path):
         await asyncio.sleep(PUBLISH_DELAY_BEFORE_PDF)

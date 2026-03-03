@@ -2,7 +2,14 @@
 
 import pytest
 
-from src.utils.text import split_text, strip_markdown_asterisks, summary_to_html
+from src.utils.text import (
+    split_html_safe,
+    split_text,
+    strip_markdown_asterisks,
+    strip_safe_html_to_plain,
+    summary_to_html,
+    summary_to_safe_html,
+)
 
 
 def test_split_text_empty() -> None:
@@ -148,3 +155,85 @@ def test_split_text_prompt_over_4096_returns_multiple_chunks() -> None:
     chunks = split_text(long_prompt)
     assert len(chunks) >= 2
     assert sum(len(c) for c in chunks) >= len(long_prompt.strip()) - (len(chunks) - 1) * 2
+
+
+# --- summary_to_safe_html ---
+
+
+def test_summary_to_safe_html_empty() -> None:
+    assert summary_to_safe_html("") == ""
+    assert summary_to_safe_html(None) == ""
+
+
+def test_summary_to_safe_html_bold_italic() -> None:
+    assert summary_to_safe_html("**bold**") == "<b>bold</b>"
+    assert summary_to_safe_html("*italic*") == "<i>italic</i>"
+    assert summary_to_safe_html("**b** and *i*") == "<b>b</b> and <i>i</i>"
+
+
+def test_summary_to_safe_html_strips_raw_html() -> None:
+    """Raw HTML is escaped so no injection; angle brackets become entities."""
+    out = summary_to_safe_html("<script>alert(1)</script>")
+    assert "<script>" not in out and "alert(1)" in out
+    assert "&lt;" in out or "<" not in out
+    out2 = summary_to_safe_html("a <b>tag</b> b")
+    assert "tag" in out2
+    assert "<b>" not in out2 or out2.count("<b>") == 1  # our allowed <b> from ** only
+
+
+def test_summary_to_safe_html_escapes() -> None:
+    """Special chars are escaped so Telegram accepts the message."""
+    out = summary_to_safe_html("a < b & c > d")
+    assert "&lt;" in out and "&amp;" in out and "&gt;" in out
+    assert "a " in out and " d" in out
+
+
+def test_summary_to_safe_html_blockquote() -> None:
+    text = "Intro\n> quote line one\n> quote line two\nOutro"
+    out = summary_to_safe_html(text)
+    assert "<blockquote>" in out and "quote line one" in out and "quote line two" in out and "</blockquote>" in out
+    assert "Intro" in out and "Outro" in out
+
+
+# --- split_html_safe ---
+
+
+def test_split_html_safe_empty() -> None:
+    assert split_html_safe("") == []
+    assert split_html_safe("   ") == []
+
+
+def test_split_html_safe_under_limit() -> None:
+    html = "<b>bold</b> text"
+    assert split_html_safe(html) == [html]
+
+
+def test_split_html_safe_splits_after_tag() -> None:
+    part1 = "<b>bold</b> " * 500
+    part2 = "<i>tail</i>"
+    html = part1 + part2
+    chunks = split_html_safe(html, limit=800)
+    assert len(chunks) >= 2
+    for c in chunks:
+        assert "<b>" not in c or "</b>" in c or c.rstrip().endswith("</b>")
+        assert "<i>" not in c or "</i>" in c
+
+
+def test_split_html_safe_splits_after_closing_tag_not_newline() -> None:
+    """When both \\n and </blockquote> exist in window, we split after </blockquote>, not \\n."""
+    # So first chunk is valid HTML (ends with </blockquote>)
+    html = "<blockquote>a\nb\nc</blockquote>" + " tail" * 100
+    chunks = split_html_safe(html, limit=50)
+    assert len(chunks) >= 2
+    # First chunk must end with </blockquote>, not with "\n" or "c" (would be broken)
+    assert chunks[0].strip().endswith("</blockquote>")
+
+
+# --- strip_safe_html_to_plain ---
+
+
+def test_strip_safe_html_to_plain() -> None:
+    assert strip_safe_html_to_plain("<b>bold</b>") == "bold"
+    assert strip_safe_html_to_plain("<i>i</i>") == "i"
+    assert strip_safe_html_to_plain("<blockquote>q</blockquote>") == "q\n"
+    assert strip_safe_html_to_plain("<b>a</b> and <i>b</i>") == "a and b"

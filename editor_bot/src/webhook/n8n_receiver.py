@@ -20,7 +20,7 @@ from src.database.repository import (
     update_post_delivery_failed,
 )
 from src.database.admin_repository import get_editors_list
-from src.utils.text import split_text, strip_markdown_asterisks, SUMMARY_MAX_LENGTH
+from src.utils.text import split_html_safe, summary_to_safe_html, SUMMARY_MAX_LENGTH
 
 log = structlog.get_logger()
 
@@ -284,13 +284,11 @@ async def _send_to_editors_background(
                     pdf_path=pdf_path,
                     reason=reason,
                 )
-            summary_safe = html.escape(strip_markdown_asterisks(summary or ""))
-            text = (
-                f"Пост #{post_id}\n\n"
-                f"Саммари:\n{summary_safe}\n\n"
-                f"Источник: {post.source_channel} / msg #{post.source_message_id}"
-            )
-            chunks = split_text(text)
+            header = html.escape(f"Пост #{post_id}\n\nСаммари:\n")
+            footer = html.escape(f"\n\nИсточник: {post.source_channel} / msg #{post.source_message_id}")
+            body_html = summary_to_safe_html(summary or "")
+            text = header + body_html + footer
+            chunks = split_html_safe(text)
             if not chunks:
                 chunks = [text]
             kb = review_keyboard(post_id)
