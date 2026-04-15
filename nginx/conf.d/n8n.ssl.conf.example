@@ -4,7 +4,7 @@
 # 3. Mount certbot_conf and certbot_www in nginx (see docker-compose volumes).
 
 server {
-    listen 443 ssl;
+    listen 8443 ssl;
     server_name n8n.neurascope.pro;
 
     ssl_certificate /etc/letsencrypt/live/n8n.neurascope.pro/fullchain.pem;

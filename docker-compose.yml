@@ -37,7 +37,7 @@ services:
       N8N_PROTOCOL: ${N8N_PROTOCOL:-https}
       N8N_PORT: 5678
       N8N_PROXY_HOPS: "1"
-      WEBHOOK_URL: ${N8N_PROTOCOL:-https}://${N8N_HOST:-n8n.neurascope.pro}/
+      WEBHOOK_URL: ${N8N_EXTERNAL_URL:-https://n8n.neurascope.pro:8443/}
       # Токен для workflow: заголовок Authorization к editor-bot ($env.EDITOR_BOT_WEBHOOK_TOKEN)
       EDITOR_BOT_WEBHOOK_TOKEN: ${EDITOR_BOT_WEBHOOK_TOKEN:-}
       # Разрешить нодам читать переменные окружения
@@ -115,7 +115,7 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
+      - "8443:8443"
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - certbot_www:/var/www/certbot:ro
